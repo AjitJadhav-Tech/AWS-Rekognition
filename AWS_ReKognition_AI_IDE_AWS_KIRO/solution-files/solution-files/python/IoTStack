@@ -1,0 +1,78 @@
+
+What changes vs what stays the same
+Stays exactly the same ✅
+Everything from S3 onwards is untouched:
+
+S3 → SNS → SQS → image_recognition Lambda
+→ Rekognition → DynamoDB → Athena → QuickSight
+What changes — the ingestion layer
+Currently:
+
+curl (human) → API Gateway → ImageGetAndSaveLambda → S3
+With IoT cameras:
+
+Street camera → AWS IoT Core → S3  (direct, no API Gateway needed)
+The IoT Architecture
+Street Camera (Raspberry Pi / IP camera)
+    │
+    │  MQTT over TLS (port 8883)
+    ▼
+AWS IoT Core
+    │  IoT Rule: "SELECT * FROM 'cameras/+/image'"
+    │
+    ├──► S3 Action → sagemaker-eu-central-1-015337708931/<camera-id>/<timestamp>.jpg
+    │                  ↓
+    │              S3 PUT event → SNS → SQS → image_recognition Lambda (unchanged)
+    │
+    └──► DynamoDB Action → log raw device metadata (optional)
+Specific changes needed
+1. New: IoT Stack (new CDK stack)
+# iot/infrastructure.py
+- aws_iot.CfnThing          # register each camera as an IoT Thing
+- aws_iot.CfnPolicy         # allow camera to publish to MQTT topic
+- aws_iot.CfnTopicRule      # rule: on image message → write to S3
+- aws_iot.CfnCertificate    # X.509 cert per camera (device auth)
+2. Remove: ImageGetAndSaveLambda + API Gateway (APIStack)
+No longer needed — cameras push directly to IoT Core which writes to S3.
+
+3. Change: S3 key naming convention
+Currently: name parameter from curl (e.g. car1.jpg) With IoT: <camera-id>/<timestamp>.jpg (e.g. cam-a3-ffm-001/2026-05-24T06:00:00Z.jpg)
+
+Update image_recognition.py to parse the richer key:
+
+# Extract camera ID from S3 key
+# key = "cam-a3-ffm-001/2026-05-24T06:00:00Z.jpg"
+camera_id = key.split("/")[0]
+timestamp = key.split("/")[1].replace(".jpg", "")
+4. Change: DynamoDB item — add camera metadata
+db_item = {
+    "image":     {"S": key},
+    "labels":    {"S": str(db_result)},
+    "camera_id": {"S": camera_id},      # NEW
+    "timestamp": {"S": timestamp},       # NEW
+    "location":  {"S": camera_location}, # NEW — from IoT Thing attributes
+}
+5. Camera device code (runs on the camera)
+# Runs on Raspberry Pi / embedded Linux
+import awsiot.mqtt_connection_builder
+import base64, time, picamera
+
+# Capture frame → encode → publish to IoT Core
+camera = picamera.PiCamera()
+camera.capture('/tmp/frame.jpg')
+with open('/tmp/frame.jpg', 'rb') as f:
+    payload = base64.b64encode(f.read()).decode()
+
+mqtt_connection.publish(
+    topic=f"cameras/{CAMERA_ID}/image",
+    payload=json.dumps({"image": payload, "timestamp": time.time()}),
+    qos=mqtt5.QoS.AT_LEAST_ONCE
+)
+What you'd need to add to this project
+Item	Effort
+New IoTStack CDK stack	Medium — register Things, certs, IoT Rule
+Update image_recognition.py	Small — parse new S3 key format
+Update DynamoDB item schema	Small — add camera_id, timestamp, location
+Remove APIStack (optional)	Small — or keep it for manual testing
+Camera firmware (Python on Pi)	Separate — runs on the device
+Do you want me to build the IoTStack CDK code and update image_recognition.py for the richer schema?
