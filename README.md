@@ -171,7 +171,7 @@ Contributions welcome! Areas for improvement:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project can be used by the curious - (all the curious and people who want to build something amazing)
 
 ## 👤 Author
 
