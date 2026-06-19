@@ -3,7 +3,6 @@
 [![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazon-aws)](https://aws.amazon.com/)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
 [![CDK](https://img.shields.io/badge/AWS_CDK-2.118.0-green)](https://aws.amazon.com/cdk/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A production-ready, serverless image processing pipeline built with AWS CDK, Python, and Amazon Rekognition. This system automatically classifies images, stores results in DynamoDB, forwards data to downstream systems, and provides rich analytics through Amazon QuickSight.
 
